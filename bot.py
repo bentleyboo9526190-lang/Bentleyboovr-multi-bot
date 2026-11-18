@@ -217,6 +217,18 @@ async def giveaways_command(interaction: discord.Interaction):
     active = [f"• {g['prize']} — message ID {gid}" for gid,g in giveaways.items() if int(g.get("guild_id",0)) == interaction.guild_id and not g["ended"]]
     await interaction.response.send_message("\n".join(active) if active else "No active giveaways.", ephemeral=True)
 
+# GIVEAWAY EXPIRY: finish giveaways after their saved end timestamp
+@tasks.loop(seconds=30)
+async def giveaway_expiry():
+    now = datetime.now(timezone.utc).timestamp()
+    for giveaway_id, item in list(giveaways.items()):
+        if not item.get("ended") and float(item.get("end_at", now + 1)) <= now:
+            await end_giveaway(giveaway_id)
+
+@giveaway_expiry.before_loop
+async def before_giveaway_expiry():
+    await bot.wait_until_ready()
+
 # POST WATCHER - YouTube RSS feed
 YOUTUBE_ID = os.getenv("YOUTUBE_CHANNEL_ID", "").strip()
 POST_CHANNEL = envint("POST_CHANNEL_ID")
@@ -271,6 +283,7 @@ async def on_ready():
         except Exception: log.exception("Could not sync slash commands")
     bot.add_view(GiveawayView())
     if not youtube_check.is_running(): youtube_check.start()
+    if not giveaway_expiry.is_running(): giveaway_expiry.start()
     log.info("Online as %s", bot.user)
 token = os.getenv("DISCORD_TOKEN")
 if not token: raise RuntimeError("DISCORD_TOKEN is missing. Add it in Blitz environment variables.")
