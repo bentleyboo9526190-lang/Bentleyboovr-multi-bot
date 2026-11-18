@@ -339,7 +339,7 @@ class AnimalUpdates(commands.Cog):
     async def on_ready(self):
         if not self.update_checker.is_running():
             self.update_checker.start()
-            print("[ANIMAL] Update checker started; monitoring Meta Store, SteamDB, and Steam Community every 5 minutes.")
+            print(f"[ANIMAL] Update checker started; polling configured sources every {CHECK_INTERVAL_SECONDS} seconds.")
 
 
 async def setup(bot):
