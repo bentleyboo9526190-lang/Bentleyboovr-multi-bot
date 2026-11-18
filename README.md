@@ -25,7 +25,7 @@ Bentleyboovr Helper / Zeppelin and the AI chatbot remain separate and are not in
 - `WELCOME_CHANNEL_ID`: channel for join/leave messages.
 - `POST_CHANNEL_ID`: channel for YouTube upload announcements.
 - `YOUTUBE_CHANNEL_ID`: YouTube channel ID beginning with UC.
-- `POST_MENTION`: defaults to @everyone; can be a role mention such as <@&ROLE_ID>.
+- `POST_MENTION`: optional role ID (the bot converts it to a real role mention), `<@&ROLE_ID>`, `@everyone`, or `@here`.
 - `LEVEL_ROLE_REWARDS`: optional comma-separated level-to-role IDs, e.g. `1:ROLE_ID,2:ROLE_ID`.
 - `DATA_DIR`: defaults to data.
 - `UPDATE_CHANNEL_ID`: channel for Animal Company version and Steam announcement posts.
@@ -56,7 +56,7 @@ Enable **Server Members Intent** and **Message Content Intent**. Invite with the
 - Role rewards are optional via LEVEL_ROLE_REWARDS.
 
 ### Post watcher
-- Checks the YouTube RSS feed every five minutes.
+- Checks the YouTube RSS feed every five minutes. On first startup, it saves existing uploads as a baseline; only uploads published after that baseline are announced. The baseline and seen-video history are stored in DATA_DIR.
 - This initial merged version watches YouTube only. The old Post Watcher source available for review did not include a working TikTok watcher.
 
 ### Predictor
@@ -79,7 +79,7 @@ Enable **Server Members Intent** and **Message Content Intent**. Invite with the
 - Requires Manage Roles, Add Reactions, Read Message History; put the bot's role above all five reaction roles.
 
 ### Animal Company updates
-- Checks all three requested pages every five minutes: [Meta Store](https://www.meta.com/experiences/animal-company/7190422614401072/), [SteamDB Patch Notes](https://steamdb.info/app/4551040/patchnotes/), and [the specified Steam Community announcement](https://steamcommunity.com/games/4551040/announcements/detail/671759636714487921).
+- Checks all three requested pages every two seconds: [Meta Store](https://www.meta.com/experiences/animal-company/7190422614401072/), [SteamDB Patch Notes](https://steamdb.info/app/4551040/patchnotes/), and [the specified Steam Community announcement](https://steamcommunity.com/games/4551040/announcements/detail/671759636714487921).
 - Also checks Steam's latest public news feed so new Steam announcements can be detected beyond the one specified announcement page.
 - Requires two consecutive checks to confirm a page change before posting. On the first run, it saves a baseline rather than announcing old page content.
 - `!checkversion`, `!checkstate`, and admin-only `!testupdate`.
