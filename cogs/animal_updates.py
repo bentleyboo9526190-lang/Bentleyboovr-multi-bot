@@ -14,7 +14,7 @@ from discord.ext import commands, tasks
 
 UPDATE_CHANNEL_ID = int(os.getenv("UPDATE_CHANNEL_ID", "0"))
 UPDATE_ROLE_ID = int(os.getenv("UPDATE_ROLE_ID", "0"))
-CHECK_INTERVAL_SECONDS = 300
+CHECK_INTERVAL_SECONDS = 2
 REQUIRED_CONFIRMATIONS = 2
 
 # These are the three exact sources requested for Animal Company updates.
