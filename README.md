@@ -79,8 +79,9 @@ Enable **Server Members Intent** and **Message Content Intent**. Invite with the
 - Requires Manage Roles, Add Reactions, Read Message History; put the bot's role above all five reaction roles.
 
 ### Animal Company updates
-- Monitors Meta Store, VRDB, Quest Store DB, and Steam Community announcements.
-- Uses two confirmations before posting detected updates.
+- Checks all three requested pages every five minutes: [Meta Store](https://www.meta.com/experiences/animal-company/7190422614401072/), [SteamDB Patch Notes](https://steamdb.info/app/4551040/patchnotes/), and [the specified Steam Community announcement](https://steamcommunity.com/games/4551040/announcements/detail/671759636714487921).
+- Also checks Steam's latest public news feed so new Steam announcements can be detected beyond the one specified announcement page.
+- Requires two consecutive checks to confirm a page change before posting. On the first run, it saves a baseline rather than announcing old page content.
 - `!checkversion`, `!checkstate`, and admin-only `!testupdate`.
 - Requires `UPDATE_CHANNEL_ID`; `UPDATE_ROLE_ID` is optional.
 
