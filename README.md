@@ -1,14 +1,17 @@
 # Bentleyboovr Multi Bot
 
-A single Python Discord bot with exactly six modules:
+A single Python Discord bot combining the requested server features:
 1. Purge
 2. Giveaways
 3. Leveling
 4. YouTube Post Watcher
 5. Predictor (8-ball + funny predictions)
 6. Welcomer
+7. Artwork ticket system
+8. Reaction role menu
+9. Animal Company update watcher
 
-The separate Helper/Zeppelin bot, AI chatbot, ticket bot, Animal Company Update Bot, and Role Giver are not included.
+Bentleyboovr Helper / Zeppelin and the AI chatbot remain separate and are not included.
 
 ## Blitz deployment
 - Runtime: Python 3.12, or deploy with the included Dockerfile.
@@ -25,6 +28,12 @@ The separate Helper/Zeppelin bot, AI chatbot, ticket bot, Animal Company Update 
 - `POST_MENTION`: defaults to @everyone; can be a role mention such as <@&ROLE_ID>.
 - `LEVEL_ROLE_REWARDS`: optional comma-separated level-to-role IDs, e.g. `1:ROLE_ID,2:ROLE_ID`.
 - `DATA_DIR`: defaults to data.
+- `UPDATE_CHANNEL_ID`: channel for Animal Company version and Steam announcement posts.
+- `UPDATE_ROLE_ID`: optional role to mention for Animal Company updates.
+- `ARTWORK_PANEL_CHANNEL_ID`: channel where the artwork ticket panel is posted (defaults to the original ticket bot channel).
+- `TICKET_OWNER_ID`: staff account allowed to close artwork tickets (defaults to the original owner).
+- `ROLE_PANEL_CHANNEL_ID`: channel where the reaction-role panel is posted (defaults to the original role bot channel).
+- `ROLE_GIVEAWAY_ID`, `ROLE_ADMIN_GAME_ID`, `ROLE_ARTWORK_ID`, `ROLE_AC_UPDATES_ID`, `ROLE_ANNOUNCEMENTS_ID`: role IDs for the five reaction buttons (default to the original role bot configuration).
 
 ## Discord Developer Portal
 Enable **Server Members Intent** and **Message Content Intent**. Invite with the `bot` and `applications.commands` scopes. Grant the permissions needed: View Channels, Send Messages, Read Message History, Embed Links, Manage Messages (purge), and Manage Roles (only if using level role rewards). Put the bot's role above reward roles.
@@ -56,6 +65,24 @@ Enable **Server Members Intent** and **Message Content Intent**. Invite with the
 
 ### Welcomer
 - Join and leave notices are sent to WELCOME_CHANNEL_ID.
+
+### Artwork tickets
+- Automatically creates or restores an artwork request panel in `ARTWORK_PANEL_CHANNEL_ID`.
+- The Artwork Request button creates a private ticket in an Artwork Requests category.
+- Ticket owner and the configured ticket owner can close the ticket with the Close Ticket button.
+- Requires Manage Channels and channel permission management.
+
+### Reaction roles
+- Automatically creates or restores the Choose Your Roles panel in `ROLE_PANEL_CHANNEL_ID`.
+- 💵 Giveaway, 🎮 Admin Game, 🧑‍🎨 Artwork, 🗓️ AC Updates, and 🎤 Announcements.
+- Adding a reaction grants the matching role; removing it removes the role.
+- Requires Manage Roles, Add Reactions, Read Message History; put the bot's role above all five reaction roles.
+
+### Animal Company updates
+- Monitors Meta Store, VRDB, Quest Store DB, and Steam Community announcements.
+- Uses two confirmations before posting detected updates.
+- `!checkversion`, `!checkstate`, and admin-only `!testupdate`.
+- Requires `UPDATE_CHANNEL_ID`; `UPDATE_ROLE_ID` is optional.
 
 ## Data
 Levels, giveaway entries, and seen YouTube video IDs are stored as JSON under DATA_DIR. Use persistent storage to preserve them across restarts/redeploys.
