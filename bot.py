@@ -285,6 +285,18 @@ async def on_ready():
     if not youtube_check.is_running(): youtube_check.start()
     if not giveaway_expiry.is_running(): giveaway_expiry.start()
     log.info("Online as %s", bot.user)
+# Load the additional feature modules before connecting to Discord.
+async def setup_extensions():
+    for extension in (
+        "cogs.artwork_tickets",
+        "cogs.reaction_roles",
+        "cogs.animal_updates",
+    ):
+        await bot.load_extension(extension)
+        log.info("Loaded extension: %s", extension)
+
+bot.setup_hook = setup_extensions
+
 token = os.getenv("DISCORD_TOKEN")
 if not token: raise RuntimeError("DISCORD_TOKEN is missing. Add it in Blitz environment variables.")
 bot.run(token)
