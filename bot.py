@@ -232,34 +232,119 @@ async def before_giveaway_expiry():
 # POST WATCHER - YouTube RSS feed
 YOUTUBE_ID = os.getenv("YOUTUBE_CHANNEL_ID", "").strip()
 POST_CHANNEL = envint("POST_CHANNEL_ID")
-POST_MENTION = os.getenv("POST_MENTION", "@everyone")
+POST_MENTION_RAW = os.getenv("POST_MENTION", "").strip()
 SEEN_FILE = DATA / "seen_videos.json"
+YOUTUBE_STATE_FILE = DATA / "youtube_state.json"
 seen = set(load(SEEN_FILE, []))
+
+def youtube_mention():
+    """Accept a role ID, role mention, @everyone, or @here."""
+    value = POST_MENTION_RAW
+    if not value:
+        return None
+    if value.isdigit():
+        return f"<@&{value}>"
+    if re.fullmatch(r"<@&\d+>", value) or value in ("@everyone", "@here"):
+        return value
+    log.warning("POST_MENTION must be a role ID, <@&ROLE_ID>, @everyone, or @here; ignoring invalid value.")
+    return None
+
 @tasks.loop(minutes=5)
 async def youtube_check():
-    if not YOUTUBE_ID or not POST_CHANNEL: return
-    url = "https://www.youtube.com/feeds/videos.xml?channel_id=" + YOUTUBE_ID
+    if not YOUTUBE_ID or not POST_CHANNEL:
+        return
+    feed_url = "https://www.youtube.com/feeds/videos.xml?channel_id=" + YOUTUBE_ID
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as response:
-                if response.status != 200: return
+            async with session.get(feed_url, timeout=aiohttp.ClientTimeout(total=20)) as response:
+                if response.status != 200:
+                    log.warning("YouTube RSS returned HTTP %s", response.status)
+                    return
                 xml = await response.text()
+
         channel = bot.get_channel(POST_CHANNEL)
-        if not channel: return
-        entries = re.findall(r"<entry>(.*?)</entry>", xml, re.S)
-        for entry in reversed(entries):
-            vid = re.search(r"<yt:videoId>(.*?)</yt:videoId>", entry)
-            title = re.search(r"<title>(.*?)</title>", entry, re.S)
-            if not vid or vid.group(1) in seen: continue
-            video_id = vid.group(1)
-            url_match = re.search(r'<link rel="alternate" href="([^"]+)"', entry)
-            video_url = url_match.group(1) if url_match else "https://www.youtube.com/watch?v=" + video_id
-            video_title = title.group(1) if title else "New video"
-            await channel.send(f"{POST_MENTION} Bentleyboovr has posted! Go watch it! 🚨🚨🚨 🔥🔥🔥\n**{video_title}**\n{video_url}")
-            seen.add(video_id); save(SEEN_FILE, sorted(seen))
-    except Exception: log.exception("YouTube watcher error")
+        if channel is None:
+            try:
+                channel = await bot.fetch_channel(POST_CHANNEL)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                log.warning("YouTube announcement channel %s is unavailable.", POST_CHANNEL)
+                return
+
+        # Atom XML gives each upload a stable video ID and publication timestamp.
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(xml)
+        ns = {"atom": "http://www.w3.org/2005/Atom", "yt": "http://www.youtube.com/xml/schemas/2015"}
+        entries = root.findall("atom:entry", ns)
+
+        state = load(YOUTUBE_STATE_FILE, {})
+        initialized_at = state.get("initialized_at")
+        if not initialized_at:
+            # First run: save the current feed as a baseline, never replay old uploads.
+            for entry in entries:
+                video_id_el = entry.find("yt:videoId", ns)
+                if video_id_el is not None and video_id_el.text:
+                    seen.add(video_id_el.text.strip())
+            save(SEEN_FILE, sorted(seen))
+            state["initialized_at"] = datetime.now(timezone.utc).isoformat()
+            save(YOUTUBE_STATE_FILE, state)
+            log.info("YouTube watcher initialized; saved %s existing uploads as baseline.", len(entries))
+            return
+
+        cutoff = datetime.fromisoformat(initialized_at)
+        if cutoff.tzinfo is None:
+            cutoff = cutoff.replace(tzinfo=timezone.utc)
+
+        # Process oldest-to-newest so multiple genuinely new uploads appear in order.
+        for entry in entries:
+            video_id_el = entry.find("yt:videoId", ns)
+            title_el = entry.find("atom:title", ns)
+            published_el = entry.find("atom:published", ns)
+            link_el = entry.find("atom:link[@rel='alternate']", ns)
+            if video_id_el is None or not video_id_el.text:
+                continue
+            video_id = video_id_el.text.strip()
+            if video_id in seen:
+                continue
+
+            # Missing/invalid timestamps are not announced; this prevents replaying
+            # feed entries that cannot be proven to be newer than the baseline.
+            try:
+                published = datetime.fromisoformat(published_el.text.replace("Z", "+00:00"))
+                if published.tzinfo is None:
+                    published = published.replace(tzinfo=timezone.utc)
+            except (AttributeError, ValueError):
+                log.warning("Skipping YouTube video %s because its publish date is missing or invalid.", video_id)
+                seen.add(video_id)
+                save(SEEN_FILE, sorted(seen))
+                continue
+
+            if published <= cutoff:
+                seen.add(video_id)
+                save(SEEN_FILE, sorted(seen))
+                continue
+
+            video_url = link_el.attrib.get("href") if link_el is not None else f"https://www.youtube.com/watch?v={video_id}"
+            video_title = title_el.text.strip() if title_el is not None and title_el.text else "New video"
+            mention = youtube_mention()
+            content = f"{mention + ' ' if mention else ''}Bentleyboovr has posted! Go watch it! 🚨🔥\n**{discord.utils.escape_markdown(video_title)}**\n{video_url}"
+            allowed = discord.AllowedMentions(roles=True, everyone=True, users=False)
+            try:
+                await channel.send(content, allowed_mentions=allowed)
+            except discord.HTTPException:
+                log.exception("Could not announce YouTube video %s; it will be retried next check.", video_id)
+                continue
+
+            seen.add(video_id)
+            save(SEEN_FILE, sorted(seen))
+            log.info("Announced new YouTube upload %s published at %s", video_id, published.isoformat())
+    except (ET.ParseError, aiohttp.ClientError, asyncio.TimeoutError):
+        log.exception("YouTube watcher could not read the RSS feed.")
+    except Exception:
+        log.exception("Unexpected YouTube watcher error.")
+
 @youtube_check.before_loop
-async def before_youtube(): await bot.wait_until_ready()
+async def before_youtube():
+    await bot.wait_until_ready()
 
 # WELCOMER
 WELCOME_CHANNEL = envint("WELCOME_CHANNEL_ID")
