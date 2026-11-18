@@ -101,6 +101,55 @@ def visible_text(page):
     return text
 
 
+class MetaMetadataParser(HTMLParser):
+    """Read stable product metadata without cookie banners or page UI text."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.values = []
+        self.in_title = False
+        self.title_parts = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag.lower() == "title":
+            self.in_title = True
+        if tag.lower() == "meta":
+            key = (attrs.get("property") or attrs.get("name") or attrs.get("itemprop") or "").lower()
+            value = (attrs.get("content") or "").strip()
+            if value and key in {
+                "og:title", "og:description", "og:updated_time",
+                "twitter:title", "twitter:description", "description",
+                "product:price:amount", "product:availability",
+                "product:retailer_item_id"
+            }:
+                self.values.append(f"{key}: {value}")
+
+    def handle_endtag(self, tag):
+        if tag.lower() == "title":
+            self.in_title = False
+
+    def handle_data(self, data):
+        if self.in_title and data.strip():
+            self.title_parts.append(data.strip())
+
+
+def monitoring_text(source, page):
+    # Meta's localized cookie-consent overlay is not game-update content.
+    # Monitor stable product metadata instead of the visible page body.
+    if source == "Meta Store":
+        parser = MetaMetadataParser()
+        try:
+            parser.feed(page)
+        except Exception:
+            return ""
+        values = list(parser.values)
+        if parser.title_parts:
+            values.insert(0, "title: " + " ".join(parser.title_parts))
+        stable = " | ".join(values)
+        return "meta-product-metadata-v2:" + stable if len(stable) >= 30 else ""
+    return visible_text(page)
+
+
 def page_fingerprint(page_text):
     # Ignore tiny page changes that are likely timestamps or rotating UI labels.
     return hashlib.sha256(page_text.encode("utf-8", errors="ignore")).hexdigest()
@@ -182,13 +231,20 @@ class AnimalUpdates(commands.Cog):
                 print(f"[ANIMAL] {source} check did not return a usable page (HTTP {status}).")
                 continue
 
-            text = visible_text(page)
+            text = monitoring_text(source, page)
             if len(text) < 80:
                 print(f"[ANIMAL] {source} returned too little readable text; will retry next check.")
                 continue
 
             fingerprint = page_fingerprint(text)
             previous = source_state.get(source, {}).get("fingerprint")
+
+            # Migrate the old Meta body-text baseline silently; it included the cookie dialog.
+            if source == "Meta Store" and previous and not previous.startswith("meta-product-metadata-v2:"):
+                source_state[source] = {"fingerprint": fingerprint, "pending": None, "confirmations": 0}
+                changed = True
+                print("[ANIMAL] Replaced old Meta cookie-banner baseline without posting.")
+                continue
 
             # First successful run saves a baseline instead of announcing old content.
             if not previous:
@@ -297,9 +353,9 @@ class AnimalUpdates(commands.Cog):
         for source, url in SOURCES.items():
             status, page = await asyncio.to_thread(fetch_page, url)
             if status == 200 and page:
-                text = visible_text(page)
+                text = monitoring_text(source, page)
                 versions = extract_versions(text)
-                results.append(f"✅ **{source}:** reachable" + (f" • Version: `{versions[-1]}`" if versions else " • No version number shown"))
+                results.append(f"✅ **{source}:** reachable" + (" • Stable product metadata available" if source == "Meta Store" and text else (f" • Version: `{versions[-1]}`" if versions else " • No version number shown")) if text else f"⚠️ **{source}:** reachable, but no stable update metadata was found")
             else:
                 results.append(f"⚠️ **{source}:** could not be read (HTTP {status})")
         feed = await asyncio.to_thread(get_latest_steam_announcement)
