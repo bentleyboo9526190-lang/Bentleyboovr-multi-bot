@@ -294,8 +294,8 @@ async def youtube_check():
         if cutoff.tzinfo is None:
             cutoff = cutoff.replace(tzinfo=timezone.utc)
 
-        # Process oldest-to-newest so multiple genuinely new uploads appear in order.
-        for entry in entries:
+        # YouTube returns newest-first; reverse it so new uploads post oldest-to-newest.
+        for entry in reversed(entries):
             video_id_el = entry.find("yt:videoId", ns)
             title_el = entry.find("atom:title", ns)
             published_el = entry.find("atom:published", ns)
